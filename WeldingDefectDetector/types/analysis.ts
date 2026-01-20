@@ -1,18 +1,11 @@
-export type DefectSeverity = 'Low' | 'Medium' | 'High' | 'Critical';
-
 export interface Defect {
   type: string;
-  description: string;
-  severity: DefectSeverity;
-  confidence: number;
-  location?: string;
+  confidence: number; // 0–100
+  bbox : number[],
 }
 
 export interface AnalysisResult {
-  status: 'PASS' | 'FAIL';
+  status: 'PASSED CHECK' | 'FAILED CHECK';
   confidence: number;
   defects: Defect[];
-  scanId: string;
-  timestamp: string;
-  processingTime: string;
 }

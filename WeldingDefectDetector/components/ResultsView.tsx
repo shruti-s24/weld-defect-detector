@@ -1,4 +1,4 @@
-import React from 'react';
+import React from "react";
 import {
   StyleSheet,
   View,
@@ -7,19 +7,31 @@ import {
   SafeAreaView,
   ScrollView,
   Image,
-} from 'react-native';
-import DefectCard from './DefectCard';
-import { AnalysisResult } from '../types/analysis';
+} from "react-native";
+import DefectCard from "./DefectCard";
+import { AnalysisResult } from "../types/analysis";
+import BoundingBoxOverlay from "./boundingboxoverlay";
 
 interface ResultsViewProps {
   results: AnalysisResult;
-  imageUri: string | null;
+  imageUri?: string | null;
   onNewScan: () => void;
 }
 
-export default function ResultsView({ results, imageUri, onNewScan }: ResultsViewProps) {
-  const statusColor = results.status === 'PASS' ? '#39ff14' : '#ff3333';
-  const statusBg = results.status === 'PASS' ? 'rgba(57, 255, 20, 0.1)' : 'rgba(255, 51, 51, 0.1)';
+export default function ResultsView({
+  results,
+  imageUri,
+  onNewScan,
+}: ResultsViewProps) {
+  const statusColor = results.status === "PASS" ? "#39ff14" : "#ff3333";
+  const statusBg =
+    results.status === "PASS"
+      ? "rgba(57, 255, 20, 0.1)"
+      : "rgba(255, 51, 51, 0.1)";
+  const [imageSize, setImageSize] = React.useState({
+    width: 0,
+    height: 0,
+  });
 
   return (
     <SafeAreaView style={styles.container}>
@@ -32,12 +44,32 @@ export default function ResultsView({ results, imageUri, onNewScan }: ResultsVie
         {/* Captured Image */}
         {imageUri && (
           <View style={styles.imageContainer}>
-            <Image source={{ uri: imageUri }} style={styles.image} />
+            <View style={styles.imageWrapper}>
+              <Image source={{ uri: imageUri }} style={styles.image} />
+
+              {imageSize.width > 0 &&
+                results.defects.map((defect, index) => (
+                  <BoundingBoxOverlay
+                    key={index}
+                    bbox={defect.bbox}
+                    imageWidth={imageSize.width}
+                    imageHeight={imageSize.height}
+                    displayWidth={DISPLAY_WIDTH}
+                    displayHeight={DISPLAY_HEIGHT}
+                    label={defect.type}
+                  />
+                ))}
+            </View>
           </View>
         )}
 
         {/* Status Badge */}
-        <View style={[styles.statusBadge, { backgroundColor: statusBg, borderColor: statusColor }]}>
+        <View
+          style={[
+            styles.statusBadge,
+            { backgroundColor: statusBg, borderColor: statusColor },
+          ]}
+        >
           <Text style={[styles.statusText, { color: statusColor }]}>
             {results.status}
           </Text>
@@ -60,7 +92,9 @@ export default function ResultsView({ results, imageUri, onNewScan }: ResultsVie
         {results.defects.length === 0 && (
           <View style={styles.noDefectsContainer}>
             <Text style={styles.noDefectsText}>✓ No defects detected</Text>
-            <Text style={styles.noDefectsSubtext}>Weld quality is excellent</Text>
+            <Text style={styles.noDefectsSubtext}>
+              Weld quality is excellent
+            </Text>
           </View>
         )}
 
@@ -92,49 +126,49 @@ export default function ResultsView({ results, imageUri, onNewScan }: ResultsVie
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a1a1a',
+    backgroundColor: "#1a1a1a",
   },
   scrollContent: {
     padding: 20,
   },
   header: {
-    alignItems: 'center',
+    alignItems: "center",
     marginTop: 20,
     marginBottom: 20,
   },
   title: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: '#00ffff',
+    fontWeight: "bold",
+    color: "#00ffff",
     letterSpacing: 2,
   },
   imageContainer: {
     borderRadius: 15,
-    overflow: 'hidden',
+    overflow: "hidden",
     marginBottom: 20,
     borderWidth: 2,
-    borderColor: '#00ffff',
+    borderColor: "#00ffff",
   },
   image: {
-    width: '100%',
+    width: "100%",
     height: 250,
-    resizeMode: 'cover',
+    resizeMode: "cover",
   },
   statusBadge: {
     padding: 20,
     borderRadius: 15,
     borderWidth: 2,
-    alignItems: 'center',
+    alignItems: "center",
     marginBottom: 20,
   },
   statusText: {
     fontSize: 32,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     letterSpacing: 2,
   },
   statusSubtext: {
     fontSize: 14,
-    color: '#a0a0a0',
+    color: "#a0a0a0",
     marginTop: 5,
   },
   defectsSection: {
@@ -142,63 +176,69 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#00ffff',
+    fontWeight: "bold",
+    color: "#00ffff",
     marginBottom: 15,
     letterSpacing: 1,
   },
   noDefectsContainer: {
-    backgroundColor: 'rgba(57, 255, 20, 0.1)',
+    backgroundColor: "rgba(57, 255, 20, 0.1)",
     borderWidth: 2,
-    borderColor: '#39ff14',
+    borderColor: "#39ff14",
     borderRadius: 15,
     padding: 30,
-    alignItems: 'center',
+    alignItems: "center",
     marginBottom: 20,
   },
   noDefectsText: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: '#39ff14',
+    fontWeight: "bold",
+    color: "#39ff14",
   },
   noDefectsSubtext: {
     fontSize: 14,
-    color: '#a0a0a0',
+    color: "#a0a0a0",
     marginTop: 5,
   },
   metadata: {
-    backgroundColor: '#2a2a2a',
+    backgroundColor: "#2a2a2a",
     borderRadius: 15,
     padding: 20,
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: '#3a3a3a',
+    borderColor: "#3a3a3a",
   },
   metadataRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     paddingVertical: 8,
   },
   metadataLabel: {
     fontSize: 14,
-    color: '#a0a0a0',
+    color: "#a0a0a0",
   },
   metadataValue: {
     fontSize: 14,
-    color: '#e0e0e0',
-    fontWeight: '600',
+    color: "#e0e0e0",
+    fontWeight: "600",
   },
   newScanButton: {
-    backgroundColor: '#00ffff',
+    backgroundColor: "#00ffff",
     paddingVertical: 18,
     borderRadius: 15,
-    alignItems: 'center',
+    alignItems: "center",
     marginBottom: 20,
   },
   newScanButtonText: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
+    fontWeight: "bold",
+    color: "#1a1a1a",
     letterSpacing: 2,
+  },
+  imageWrapper: {
+    position: "relative",
+    width: 300,
+    height: 300,
+    alignSelf: "center",
   },
 });
