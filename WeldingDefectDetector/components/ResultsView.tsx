@@ -32,6 +32,27 @@ export default function ResultsView({
     width: 0,
     height: 0,
   });
+  const [displaySize, setDisplaySize] = React.useState({
+    width: 0,
+    height: 0,
+  });
+
+  React.useEffect(() => {
+    if (!imageUri) {
+      setImageSize({ width: 0, height: 0 });
+      return;
+    }
+
+    // get natural (intrinsic) image size
+    Image.getSize(
+      imageUri,
+      (w, h) => setImageSize({ width: w, height: h }),
+      (err) => {
+        console.warn("Image.getSize failed:", err);
+        setImageSize({ width: 0, height: 0 });
+      },
+    );
+  }, [imageUri]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -45,20 +66,35 @@ export default function ResultsView({
         {imageUri && (
           <View style={styles.imageContainer}>
             <View style={styles.imageWrapper}>
-              <Image source={{ uri: imageUri }} style={styles.image} />
+              <Image
+                source={{ uri: imageUri }}
+                style={styles.image}
+                // measure actual rendered size
+                onLayout={(e) =>
+                  setDisplaySize({
+                    width: e.nativeEvent.layout.width,
+                    height: e.nativeEvent.layout.height,
+                  })
+                }
+              />
 
               {imageSize.width > 0 &&
-                results.defects.map((defect, index) => (
-                  <BoundingBoxOverlay
-                    key={index}
-                    bbox={defect.bbox}
-                    imageWidth={imageSize.width}
-                    imageHeight={imageSize.height}
-                    displayWidth={DISPLAY_WIDTH}
-                    displayHeight={DISPLAY_HEIGHT}
-                    label={defect.type}
-                  />
-                ))}
+                displaySize.width > 0 &&
+                results.defects
+                  .filter((d) =>
+                    Array.isArray(d.bbox) ? d.bbox.length >= 4 : !!d.bbox,
+                  )
+                  .map((defect, index) => (
+                    <BoundingBoxOverlay
+                      key={index}
+                      bbox={defect.bbox}
+                      imageWidth={imageSize.width}
+                      imageHeight={imageSize.height}
+                      displayWidth={displaySize.width}
+                      displayHeight={displaySize.height}
+                      label={defect.type}
+                    />
+                  ))}
             </View>
           </View>
         )}
@@ -238,7 +274,7 @@ const styles = StyleSheet.create({
   imageWrapper: {
     position: "relative",
     width: 300,
-    height: 300,
+    /* keep wrapper flexible — actual overlay sizing uses the Image onLayout */
     alignSelf: "center",
   },
 });

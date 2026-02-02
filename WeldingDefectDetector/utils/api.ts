@@ -1,7 +1,7 @@
 // utils/api.ts
 import { InspectResponse } from "../types/api";
 
-const API_BASE_URL = "http://172.20.10.4:8000"; 
+const API_BASE_URL = "http://192.168.0.100:8000"; 
 import { AnalysisResult } from '../types/analysis';
 
 export function mapApiResponse(apiResponse: any): AnalysisResult {
@@ -16,7 +16,14 @@ export function mapApiResponse(apiResponse: any): AnalysisResult {
   const defects = apiResponse.detections.map((d: any) => ({
     type: d.stage2_class,
     confidence: Math.round(d.stage2_confidence * 100),
-    bbox: d.box,
+    // be defensive about bbox field name/shape coming from the backend
+    bbox: Array.isArray(d.box)
+      ? d.box.slice(0, 4).map((v: any) => Number(v))
+      : Array.isArray(d.bbox)
+      ? d.bbox.slice(0, 4).map((v: any) => Number(v))
+      : d.box && typeof d.box === "object" && d.box.x !== undefined
+      ? [Number(d.box.x), Number(d.box.y), Number(d.box.x + d.box.w), Number(d.box.y + d.box.h)]
+      : [],
   }));
 
   const maxConfidence = Math.max(...defects.map(d => d.confidence));

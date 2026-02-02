@@ -21,13 +21,13 @@ import { AnalysisResult } from "./types/analysis";
 type AppMode = "home" | "camera" | "results";
 
 // 🔁 CHANGE THIS ONLY
-const API_URL = "http://172.20.10.4:8000/inspect/image";
+const API_URL = "http://192.168.0.100:8000/inspect/image";
 
 export default function App() {
   const [mode, setMode] = useState<AppMode>("home");
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [analysisResults, setAnalysisResults] = useState<AnalysisResult | null>(
-    null
+    null,
   );
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
@@ -71,7 +71,7 @@ export default function App() {
       console.error(error);
       Alert.alert(
         "Analysis Failed",
-        "Could not analyze image. Please try again."
+        "Could not analyze image. Please try again.",
       );
       setMode("home");
     } finally {
