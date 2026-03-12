@@ -9,8 +9,17 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  Linking,
+  Image,
 } from "react-native";
-import { mapApiResponse } from "./utils/api";
+import {
+  mapApiResponse,
+  createJob,
+  scanWeld,
+  getJobScans,
+  getScan,
+  generateJobReport,
+} from "./utils/api";
 import CameraView from "./components/CameraView";
 import ResultsView from "./components/ResultsView";
 import { AnalysisResult } from "./types/analysis";
@@ -18,10 +27,16 @@ import { AnalysisResult } from "./types/analysis";
 // 🔴 REMOVED: generateMockAnalysis
 // import { generateMockAnalysis } from './utils/mockAnalysis';
 
-type AppMode = "home" | "camera" | "results";
+type AppMode =
+  | "home"
+  | "camera"
+  | "results"
+  | "jobHistory"
+  | "scanDetail"
+  | "report";
 
 // 🔁 CHANGE THIS ONLY
-const API_URL = "http://192.168.0.100:8000/inspect/image";
+const API_URL = "http://192.168.0.102:8000/inspect/image";
 
 export default function App() {
   const [mode, setMode] = useState<AppMode>("home");
@@ -29,12 +44,15 @@ export default function App() {
   const [analysisResults, setAnalysisResults] = useState<AnalysisResult | null>(
     null,
   );
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [jobScans, setJobScans] = useState<any[] | null>(null);
+  const [selectedScan, setSelectedScan] = useState<any | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  const handleCapture = (imageUri: string) => {
+  const handleCapture = async (imageUri: string) => {
     setCapturedImage(imageUri);
     setMode("home");
-    analyzeImage(imageUri);
+    await analyzeImage(imageUri);
   };
 
   // 🧠 REAL API ANALYSIS — UI FLOW UNCHANGED
@@ -42,27 +60,13 @@ export default function App() {
     setIsAnalyzing(true);
 
     try {
-      const formData = new FormData();
-
-      formData.append("image", {
-        uri: imageUri,
-        name: "weld.jpg",
-        type: "image/jpeg",
-      } as any);
-
-      const response = await fetch(API_URL, {
-        method: "POST",
-        body: formData,
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`API error ${response.status}`);
+      if (!jobId) {
+        // create a job when first scan is triggered
+        const job = await createJob();
+        setJobId(job.job_id);
       }
 
-      const raw = await response.json();
+      const raw = await scanWeld(jobId!, imageUri);
       const results = mapApiResponse(raw);
 
       setAnalysisResults(results);
@@ -85,14 +89,49 @@ export default function App() {
     setMode("home");
   };
 
-  // 📸 CAMERA MODE (UNCHANGED)
+  const fetchHistory = async () => {
+    if (!jobId) return;
+    try {
+      const resp = await getJobScans(jobId);
+      setJobScans(resp.scans);
+      setMode("jobHistory");
+    } catch (err) {
+      console.error(err);
+      Alert.alert("Error", "Could not fetch history");
+    }
+  };
+
+  const handleScanDetail = async (scanId: string) => {
+    try {
+      const scan = await getScan(scanId);
+      setSelectedScan(scan);
+      setMode("scanDetail");
+    } catch (err) {
+      console.error(err);
+      Alert.alert("Error", "Unable to load scan details");
+    }
+  };
+
+  const handleGenerateReport = async () => {
+    if (!jobId) return;
+    try {
+      const resp = await generateJobReport(jobId);
+      Alert.alert("Report", resp.message);
+      setMode("report");
+    } catch (err) {
+      console.error(err);
+      Alert.alert("Error", "Failed to generate report");
+    }
+  };
+
+  // 📸 CAMERA MODE
   if (mode === "camera") {
     return (
       <CameraView onCapture={handleCapture} onClose={() => setMode("home")} />
     );
   }
 
-  // 📊 RESULTS MODE (UNCHANGED)
+  // 📊 RESULTS MODE
   if (mode === "results" && analysisResults) {
     return (
       <ResultsView
@@ -103,7 +142,97 @@ export default function App() {
     );
   }
 
-  // 🏠 HOME SCREEN (UNCHANGED)
+  // 📚 JOB HISTORY SCREEN
+  if (mode === "jobHistory" && jobScans) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <Text style={styles.sectionTitle}>Job History</Text>
+        <ScrollView>
+          {jobScans.map((scan) => (
+            <TouchableOpacity
+              key={scan.scan_id}
+              onPress={() => handleScanDetail(scan.scan_id)}
+            >
+              <View style={styles.historyItem}>
+                {scan.annotated_image && (
+                  <Image
+                    source={{ uri: scan.annotated_image }}
+                    style={styles.historyThumbnail}
+                  />
+                )}
+                <Text>Scan: {scan.scan_id}</Text>
+                <Text>
+                  Defects: {Object.keys(scan.defect_summary).join(", ")}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => setMode("home")}
+        >
+          <Text style={styles.backText}>← Back</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
+
+  // 🔍 SCAN DETAIL SCREEN
+  if (mode === "scanDetail" && selectedScan) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <Text style={styles.sectionTitle}>Scan Detail</Text>
+        <ScrollView>
+          <Text>ID: {selectedScan.scan_id}</Text>
+          <Text>Timestamp: {selectedScan.timestamp}</Text>
+          <Text>Defects:</Text>
+          {Object.entries(selectedScan.defect_summary).map(([d, info]) => (
+            <View key={d} style={styles.historyItem}>
+              <Text>
+                {d} x {info.count}
+              </Text>
+            </View>
+          ))}
+        </ScrollView>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => setMode("jobHistory")}
+        >
+          <Text style={styles.backText}>← Back</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
+
+  // 📄 REPORT SCREEN
+  if (mode === "report") {
+    return (
+      <SafeAreaView style={styles.container}>
+        <Text style={styles.sectionTitle}>Report</Text>
+        {jobId && (
+          <TouchableOpacity
+            onPress={() => {
+              const url = `${API_URL.replace("/inspect/image", "")}/job/${jobId}/report/download`;
+              Linking.openURL(url).catch((e) =>
+                console.error("could not open report url", e),
+              );
+            }}
+          >
+            <Text style={styles.reportLink}>Download PDF</Text>
+          </TouchableOpacity>
+        )}
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => setMode("home")}
+        >
+          <Text style={styles.backText}>← Back</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
+
+  // 🏠 HOME SCREEN
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
@@ -127,6 +256,35 @@ export default function App() {
             </View>
           ) : (
             <>
+              {/* Job controls */}
+              {jobId ? (
+                <View style={styles.jobInfo}>
+                  <Text style={styles.jobText}>Job: {jobId}</Text>
+                  <TouchableOpacity onPress={fetchHistory}>
+                    <Text style={styles.jobLink}>View History</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={handleGenerateReport}>
+                    <Text style={styles.jobLink}>Generate Report</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={styles.captureButton}
+                  onPress={async () => {
+                    const job = await createJob();
+                    setJobId(job.job_id);
+                    setMode("camera");
+                  }}
+                >
+                  <View style={styles.captureButtonInner}>
+                    <Text style={styles.captureButtonText}>START JOB</Text>
+                    <Text style={styles.captureButtonSubtext}>
+                      Tap to begin session
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              )}
+
               {/* Capture Button */}
               <TouchableOpacity
                 style={styles.captureButton}
@@ -312,5 +470,45 @@ const styles = StyleSheet.create({
   defectText: {
     fontSize: 16,
     color: "#e0e0e0",
+  },
+  jobInfo: {
+    marginBottom: 20,
+    alignItems: "center",
+  },
+  jobText: {
+    color: "#ffffff",
+    marginBottom: 4,
+  },
+  jobLink: {
+    color: "#00ffff",
+    textDecorationLine: "underline",
+    marginVertical: 2,
+  },
+  historyItem: {
+    padding: 12,
+    borderBottomWidth: 1,
+    borderColor: "#333",
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  historyThumbnail: {
+    width: 50,
+    height: 50,
+    marginRight: 10,
+    borderRadius: 4,
+  },
+  backButton: {
+    marginTop: 20,
+    alignSelf: "center",
+  },
+  backText: {
+    color: "#00ffff",
+    fontSize: 16,
+  },
+  reportLink: {
+    color: "#00ffff",
+    fontSize: 18,
+    textAlign: "center",
+    marginVertical: 20,
   },
 });

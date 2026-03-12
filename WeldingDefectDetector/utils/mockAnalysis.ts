@@ -79,3 +79,24 @@ export function generateMockAnalysis(): AnalysisResult {
     processingTime: `${(Math.random() * 0.5 + 1.5).toFixed(2)}s`,
   };
 }
+
+// Developer helper: simulate backend returning a detection that is labeled "Good Welding"
+// (used to verify that such detections are ignored and the overall status is PASS)
+export function generateBackendGoodWeldDetectionResponse() {
+  return {
+    weld_detected: true,
+    num_detections: 1,
+    detections: [
+      {
+        bbox: [10, 10, 100, 60],
+        stage1_confidence: 0.98,
+        stage2_class: 'Good Welding',
+        stage2_confidence: 0.995,
+      },
+    ],
+    // frontend will synthesize these if the backend doesn't provide them
+    scanId: `WI-${Date.now().toString(36).toUpperCase()}`,
+    timestamp: new Date().toISOString(),
+    processingTime: '0.45s',
+  };
+}

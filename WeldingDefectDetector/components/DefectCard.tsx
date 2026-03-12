@@ -23,6 +23,12 @@ export default function DefectCard({ defect }: DefectCardProps) {
     <View style={[styles.card, { borderColor: color }]}>
       <Text style={[styles.type, { color }]}>{defect.type}</Text>
       <Text style={styles.confidence}>Confidence: {defect.confidence}%</Text>
+      {defect.description && (
+        <Text style={styles.description}>{defect.description}</Text>
+      )}
+      {defect.recommendation && (
+        <Text style={styles.recommendation}>{defect.recommendation}</Text>
+      )}
     </View>
   );
 }
@@ -43,5 +49,15 @@ const styles = StyleSheet.create({
   confidence: {
     fontSize: 14,
     color: "#e0e0e0",
+  },
+  description: {
+    fontSize: 12,
+    color: "#c0c0c0",
+    marginTop: 6,
+  },
+  recommendation: {
+    fontSize: 12,
+    color: "#a0e0a0",
+    marginTop: 4,
   },
 });

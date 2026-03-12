@@ -11,7 +11,10 @@ def draw_boxes(image: Image.Image, detections):
 
     for det in detections:
         x1, y1, x2, y2 = det["bbox"]
-        label = f'{det["stage2_class"]} ({det["stage2_confidence"]:.2f})'
+        # support both old and new keys
+        cls = det.get("stage2_class") or det.get("label") or ""
+        conf = det.get("stage2_confidence") or det.get("confidence") or 0.0
+        label = f"{cls} ({conf:.2f})"
 
         cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
         cv2.putText(

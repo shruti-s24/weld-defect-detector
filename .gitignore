@@ -1,1 +1,5 @@
 node_modules
+backend/jobs/
+backend/scans/
+backend/uploads/
+backend/reports/
