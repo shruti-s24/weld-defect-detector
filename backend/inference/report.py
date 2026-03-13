@@ -27,7 +27,7 @@ def generate_pdf(data, output_path):
     job_id = data.get("job_id", "Unknown")
     total_scans = data.get("total_scans", 0)
     inspection_date = data.get("inspection_date", "")
-    image_path = data.get("image")
+    scans = data.get("scans", [])
 
     defect_summary = data.get("defect_summary", {})
 
@@ -64,16 +64,27 @@ def generate_pdf(data, output_path):
     # -----------------------------
     # IMAGE
     # -----------------------------
-    if image_path:
+    # -----------------------------
+# SCAN IMAGES
+# -----------------------------
+    scans = data.get("scans", [])
 
-        content.append(Paragraph("Annotated Weld Image", styles["Heading2"]))
+    for scan in scans:
 
-        img = Image(image_path)
-        img.drawHeight = 6 * cm
-        img.drawWidth = 12 * cm
+        content.append(Paragraph(f"Scan ID: {scan['scan_id']}", styles["Heading2"]))
+        content.append(Spacer(1, 10))
 
-        content.append(img)
-        content.append(Spacer(1, 20))
+        image_path = scan.get("image_path")
+
+        if image_path:
+            try:
+                img = Image(image_path)
+                img.drawHeight = 6 * cm
+                img.drawWidth = 12 * cm
+                content.append(img)
+                content.append(Spacer(1, 20))
+            except:
+                content.append(Paragraph("Image not found", cell_style))
 
     # -----------------------------
     # DEFECT SUMMARY TABLE

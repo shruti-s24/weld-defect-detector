@@ -1,3 +1,6 @@
+from fastapi.responses import FileResponse
+
+
 import os
 import io
 import json
@@ -5,7 +8,14 @@ import uuid
 from datetime import datetime
 from collections import defaultdict
 
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, Body
+from pydantic import BaseModel
+# --------------------
+# Pydantic models for auth
+# --------------------
+class AuthRequest(BaseModel):
+    email: str
+    password: str
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, FileResponse
 
@@ -16,6 +26,11 @@ from inference.stage2 import Stage2Classifier
 from inference.utils import crop_image, draw_boxes
 from inference.explain import generate_explanation
 from inference.report import generate_pdf
+
+from auth import verify_password
+from database import users_collection, jobs_collection, scans_collection
+from auth import hash_password
+import uuid
 
 # --------------------
 # App setup
@@ -45,27 +60,78 @@ stage2 = Stage2Classifier(
     model_path=os.path.join(BASE_DIR, "models", "stage2_resnet18.pt")
 )
 
+# Explicit endpoint to serve images from uploads
+@app.get("/get-image/{filename}")
+def get_image(filename: str):
+    file_path = f"uploads/{filename}"
+    return FileResponse(file_path, media_type="image/jpeg")
+
+# Explicit endpoint to serve PDFs from reports
+@app.get("/get-pdf/{filename}")
+def get_pdf(filename: str):
+    file_path = f"reports/{filename}"
+    return FileResponse(file_path, media_type="application/pdf")
+
+#register
+@app.post("/register")
+async def register(auth: AuthRequest):
+    email = auth.email
+    password = auth.password
+    existing = await users_collection.find_one({"email": email})
+    if existing:
+        return {"error": "User already exists"}
+    user_id = f"USER_{str(uuid.uuid4())[:8]}"
+    user = {
+        "user_id": user_id,
+        "email": email,
+        "password": password  # Store as plain text (INSECURE)
+    }
+    await users_collection.insert_one(user)
+    return {
+        "message": "User created",
+        "user_id": user_id
+    }
+
+
+#login
+@app.post("/login")
+async def login(auth: AuthRequest):
+    email = auth.email
+    password = auth.password
+    user = await users_collection.find_one({"email": email})
+    if not user:
+        return {"error": "Invalid credentials"}
+    if password != user["password"]:
+        return {"error": "Invalid credentials"}
+    return {
+        "message": "Login successful",
+        "user_id": user["user_id"]
+    }
+
+
+# --------------------
+# Pydantic model for job creation
+# --------------------
+class JobCreateRequest(BaseModel):
+    user_id: str
 
 # --------------------
 # Create Job
 # --------------------
 @app.post("/job/create")
-def create_job():
-
+async def create_job(req: JobCreateRequest):
+    user_id = req.user_id
     job_id = f"JOB_{str(uuid.uuid4())[:8]}"
-
-    job_data = {
+    job = {
         "job_id": job_id,
-        "created_at": datetime.utcnow().isoformat(),
+        "user_id": user_id,
         "scans": [],
-        "report_path": None,
+        "created_at": datetime.utcnow().isoformat()
     }
-
-    with open(f"jobs/{job_id}.json", "w") as f:
-        json.dump(job_data, f, indent=2)
-
-    return job_data
-
+    await jobs_collection.insert_one(job)
+    if '_id' in job:
+        del job['_id']
+    return job
 
 # --------------------
 # Scan Weld (Job Based)
@@ -73,9 +139,9 @@ def create_job():
 @app.post("/job/{job_id}/scan")
 async def scan_weld(job_id: str, image: UploadFile = File(...)):
 
-    job_path = f"jobs/{job_id}.json"
+    job = await jobs_collection.find_one({"job_id": job_id})
 
-    if not os.path.exists(job_path):
+    if not job:
         return {"error": "Job not found"}
 
     scan_id = f"SCAN_{str(uuid.uuid4())[:8]}"
@@ -149,17 +215,13 @@ async def scan_weld(job_id: str, image: UploadFile = File(...)):
         "defect_summary": defect_summary,
     }
 
-    with open(f"scans/{scan_id}.json", "w") as f:
-        json.dump(scan_data, f, indent=2)
-
-    with open(job_path) as f:
-        job = json.load(f)
-
-    job["scans"].append(scan_id)
-
-    with open(job_path, "w") as f:
-        json.dump(job, f, indent=2)
-
+    await scans_collection.insert_one(scan_data)
+    if '_id' in scan_data:
+        del scan_data['_id']
+    await jobs_collection.update_one(
+        {"job_id": job_id},
+        {"$push": {"scans": scan_id}}
+    )
     return scan_data
 
 
@@ -167,26 +229,30 @@ async def scan_weld(job_id: str, image: UploadFile = File(...)):
 # View Job Scan History
 # --------------------
 @app.get("/job/{job_id}/scans")
-def get_job_scans(job_id: str):
+async def get_job_scans(job_id: str):
 
-    job_path = f"jobs/{job_id}.json"
+    job = await jobs_collection.find_one({"job_id": job_id})
 
-    if not os.path.exists(job_path):
+    if not job:
         return {"error": "Job not found"}
 
-    with open(job_path) as f:
-        job = json.load(f)
-
-    scans = []
-
-    for scan_id in job["scans"]:
-        with open(f"scans/{scan_id}.json") as s:
-            scans.append(json.load(s))
-
+    scans = await scans_collection.find({"job_id": job_id}).to_list(100)
+    job_path = f"jobs/{job_id}.json"
+    report_path = None
+    if os.path.exists(job_path):
+        with open(job_path) as f:
+            job_json = json.load(f)
+            report_path = job_json.get("report_path")
+    for scan in scans:
+        if "_id" in scan:
+            del scan["_id"]
+        # Attach report_path to each scan for UI
+        scan["report_path"] = report_path
     return {
         "job_id": job_id,
         "num_scans": len(scans),
         "scans": scans,
+        "report_path": report_path
     }
 
 
@@ -194,66 +260,70 @@ def get_job_scans(job_id: str):
 # View Single Scan
 # --------------------
 @app.get("/scan/{scan_id}")
-def get_scan(scan_id: str):
+async def get_scan(scan_id: str):
 
-    scan_path = f"scans/{scan_id}.json"
+    scan = await scans_collection.find_one({"scan_id": scan_id})
 
-    if not os.path.exists(scan_path):
+    if not scan:
         return {"error": "Scan not found"}
 
-    with open(scan_path) as f:
-        return json.load(f)
+    if "_id" in scan:
+        del scan["_id"]
+
+    # Attach report_path for this scan's job
+    job_id = scan.get("job_id")
+    report_path = None
+    if job_id:
+        job_path = f"jobs/{job_id}.json"
+        if os.path.exists(job_path):
+            with open(job_path) as f:
+                job_json = json.load(f)
+                report_path = job_json.get("report_path")
+    scan["report_path"] = report_path
+    return scan
 
 
 # --------------------
 # Generate Job Report
 # --------------------
 @app.post("/job/{job_id}/report")
-def generate_job_report(job_id: str, regenerate: bool = False):
+async def generate_job_report(job_id: str, regenerate: bool = False):
+
     scan_entries = []
 
-    job_path = f"jobs/{job_id}.json"
+    job = await jobs_collection.find_one({"job_id": job_id})
 
-    if not os.path.exists(job_path):
+    if not job:
         return {"error": "Job not found"}
 
-    with open(job_path) as f:
-        job = json.load(f)
+    scans = await scans_collection.find({"job_id": job_id}).to_list(None)
 
-    if len(job["scans"]) == 0:
+    print("JOB ID:", job_id)
+    print("SCANS FOUND:", len(scans))
+    print("SCAN IDS:", [s["scan_id"] for s in scans])
+
+    if len(scans) == 0:
         return {"error": "No scans available for this job"}
 
-    if job.get("report_path") and os.path.exists(job["report_path"]) and not regenerate:
-        return {
-            "message": "Report already exists",
-            "download_url": f"/job/{job_id}/report/download",
-            "note": "Use regenerate=true to rebuild report",
-        }
-
     combined_summary = {}
-    report_image = None
-    for scan_id in job["scans"]:
 
-        with open(f"scans/{scan_id}.json") as s:
-            scan = json.load(s)
-
-        if report_image is None:
-            report_image = scan.get("annotated_image")
+    for scan in scans:
 
         scan_entries.append(
             {
-                "scan_id": scan_id,
-                "image": report_image,
-                "defects": list(scan["defect_summary"].keys()),
+                "scan_id": scan["scan_id"],
+                "image_path": scan.get("image_path"),
+                "defect_summary": scan.get("defect_summary", {})
             }
         )
 
-        for defect, data in scan["defect_summary"].items():
+        for defect, data in scan.get("defect_summary", {}).items():
 
             if defect not in combined_summary:
-                combined_summary[defect] = data
+                combined_summary[defect] = data.copy()
+
             else:
-                combined_summary[defect]["count"] += data["count"]
+                combined_summary[defect]["count"] += data.get("count", 0)
 
     report_path = f"reports/{job_id}.pdf"
 
@@ -261,43 +331,38 @@ def generate_job_report(job_id: str, regenerate: bool = False):
         {
             "job_id": job_id,
             "inspection_date": datetime.utcnow().strftime("%Y-%m-%d"),
-            "total_scans": len(job["scans"]),
-            # "image": report_image,
+            "total_scans": len(scans),
             "scans": scan_entries,
             "defect_summary": combined_summary,
         },
         report_path,
     )
 
-    job["report_path"] = report_path
-
-    with open(job_path, "w") as f:
-        json.dump(job, f, indent=2)
+    await jobs_collection.update_one(
+        {"job_id": job_id},
+        {"$set": {"report_path": report_path}}
+    )
 
     return {
         "message": "Report generated",
         "download_url": f"/job/{job_id}/report/download",
     }
 
-
 # --------------------
 # Download Existing Report
 # --------------------
 @app.get("/job/{job_id}/report/download")
-def download_report(job_id: str):
+async def download_report(job_id: str):
 
-    job_path = f"jobs/{job_id}.json"
+    job = await jobs_collection.find_one({"job_id": job_id})
 
-    if not os.path.exists(job_path):
+    if not job:
         return {"error": "Job not found"}
-
-    with open(job_path) as f:
-        job = json.load(f)
 
     report_path = job.get("report_path")
 
     if not report_path:
-        return {"error": "Report has not been generated yet"}
+        return {"error": "Report not generated"}
 
     if not os.path.exists(report_path):
         return {"error": "Report file missing"}
@@ -359,3 +424,14 @@ async def inspect_image_debug(image: UploadFile = File(...)):
     buf.seek(0)
 
     return StreamingResponse(buf, media_type="image/jpeg")
+
+
+#Get Jobs for User
+
+@app.get("/jobs/{user_id}")
+async def get_jobs(user_id: str):
+    jobs = await jobs_collection.find({"user_id": user_id}).to_list(100)
+    for job in jobs:
+        if "_id" in job:
+            del job["_id"]
+    return jobs

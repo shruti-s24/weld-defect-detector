@@ -1,27 +1,44 @@
 // utils/api.ts
 import { InspectResponse, Job, Scan, JobScansResponse, ReportResponse } from "../types/api";
+import socket
 
-const API_BASE_URL = "http://192.168.0.102:8000"; 
+hostname = socket.gethostname()
+local_ip = socket.gethostbyname(hostname)
+
+const API_BASE_URL = `http://${local_ip}:8000`;
 import { AnalysisResult } from '../types/analysis';
 
 export function mapApiResponse(apiResponse: any): AnalysisResult {
-  const isGoodWeldClass = (s: any) =>
-    typeof s === 'string' && s.toLowerCase().replace(/[^a-z]/g, '') === 'goodwelding';
 
-  const rawDetections = Array.isArray(apiResponse?.detections) ? apiResponse.detections : [];
-  // filter out any "Good Welding" detections so they are not considered defects
-  const detections = rawDetections.filter((d: any) => !isGoodWeldClass(d?.stage2_class));
+  const isGoodWeldClass = (s: any) =>
+    typeof s === "string" &&
+    s.toLowerCase().replace(/[^a-z]/g, "") === "goodwelding";
+
+  const rawDetections = Array.isArray(apiResponse?.detections)
+    ? apiResponse.detections
+    : [];
+
+  const detections = rawDetections.filter(
+    (d: any) => !isGoodWeldClass(d?.stage2_class)
+  );
 
   const meta = {
-    scanId: apiResponse?.scanId || `WI-${Date.now().toString(36).toUpperCase()}`,
+    scanId:
+      apiResponse?.scan_id ||
+      apiResponse?.scanId ||
+      `WI-${Date.now().toString(36).toUpperCase()}`,
+
     timestamp: apiResponse?.timestamp || new Date().toISOString(),
-    processingTime: apiResponse?.processingTime || undefined,
+
+    processingTime: apiResponse?.processingTime,
+
     modelVersion: apiResponse?.model_version,
   };
 
-  if (!apiResponse?.weld_detected || detections.length === 0) {
+  // If no detections -> PASS
+  if (detections.length === 0) {
     return {
-      status: 'PASS',
+      status: "PASS",
       confidence: 100,
       defects: [],
       ...meta,
@@ -30,35 +47,42 @@ export function mapApiResponse(apiResponse: any): AnalysisResult {
   }
 
   const defects = detections.map((d: any) => {
-    const type = d.stage2_class;
-    // try to pull explanation/recommendation out of the job-style response
-    let description: string | undefined;
-    let recommendation: string | undefined;
-    if (apiResponse?.defect_summary && apiResponse.defect_summary[type]) {
+
+    const type = d.stage2_class || d.label;
+
+    let description;
+    let recommendation;
+
+    if (apiResponse?.defect_summary?.[type]) {
       description = apiResponse.defect_summary[type].explanation;
       recommendation = apiResponse.defect_summary[type].recommendation;
     }
 
     return {
       type,
-      confidence: Math.round((d.stage2_confidence ?? 0) * 100),
+
+      confidence: Math.round(
+        (d.stage2_confidence ?? d.confidence ?? 0) * 100
+      ),
+
       description,
       recommendation,
-      // be defensive about bbox field name/shape coming from the backend
-      bbox: Array.isArray(d.box)
-        ? d.box.slice(0, 4).map((v: any) => Number(v))
-        : Array.isArray(d.bbox)
+
+      bbox: Array.isArray(d.bbox)
         ? d.bbox.slice(0, 4).map((v: any) => Number(v))
-        : d.box && typeof d.box === 'object' && d.box.x !== undefined
-        ? [Number(d.box.x), Number(d.box.y), Number(d.box.x + d.box.w), Number(d.box.y + d.box.h)]
+        : Array.isArray(d.box)
+        ? d.box.slice(0, 4).map((v: any) => Number(v))
         : [],
     };
   });
 
-  const maxConfidence = defects.length > 0 ? Math.max(...defects.map((d) => d.confidence)) : 0;
+  const maxConfidence =
+    defects.length > 0
+      ? Math.max(...defects.map((d) => d.confidence))
+      : 0;
 
   return {
-    status: 'FAIL',
+    status: "FAIL",
     confidence: maxConfidence,
     defects,
     ...meta,
@@ -105,8 +129,12 @@ export async function inspectImage(imageUri: string): Promise<InspectResponse> {
 }
 
 // job-based API helpers
-export async function createJob(): Promise<Job> {
-  const res = await fetch(`${API_BASE_URL}/job/create`, { method: 'POST' });
+export async function createJob(userId: string): Promise<Job> {
+  const res = await fetch(`${API_BASE_URL}/job/create`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_id: userId }),
+  });
   if (!res.ok) throw new Error('Failed to create job');
   return res.json();
 }
@@ -154,4 +182,10 @@ export async function generateJobReport(
 
 export function downloadReportUrl(jobId: string): string {
   return `${API_BASE_URL}/job/${jobId}/report/download`;
+}
+
+export async function getUserJobs(userId: string): Promise<Job[]> {
+  const res = await fetch(`${API_BASE_URL}/jobs/${userId}`);
+  if (!res.ok) throw new Error('Failed to fetch jobs');
+  return res.json();
 }
