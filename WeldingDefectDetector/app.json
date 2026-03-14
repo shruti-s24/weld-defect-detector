@@ -6,8 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "splash": {
-    },
+    "splash": {},
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
@@ -20,7 +19,13 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1a1a1a"
       },
-      "permissions": ["CAMERA", "READ_EXTERNAL_STORAGE", "WRITE_EXTERNAL_STORAGE"]
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "RECORD_AUDIO"
+      ],
+      "package": "com.kanav2k4.weldinspector"
     },
     "plugins": [
       [
@@ -28,7 +33,20 @@
         {
           "cameraPermission": "Allow Weld Inspector to access your camera for capturing weld images."
         }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "2247c91c-ca7a-4c33-9009-6c60e83e75c8"
+      }
+    }
   }
 }

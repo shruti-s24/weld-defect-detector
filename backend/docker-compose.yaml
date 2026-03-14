@@ -1,0 +1,32 @@
+version: "3.9"
+
+services:
+  backend:
+    build: .
+    container_name: weld-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - MONGO_URI=mongodb://mongo:27017/weld_inspector
+    depends_on:
+      - mongo
+    networks:
+      - weld-network
+
+  mongo:
+    image: mongo:6
+    container_name: weld-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - weld-network
+
+networks:
+  weld-network:
+    driver: bridge
+
+volumes:
+  mongo-data:

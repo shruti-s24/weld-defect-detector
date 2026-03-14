@@ -22,13 +22,10 @@ import {
   generateJobReport,
   getUserJobs,
 } from "./utils/api";
-import socket
 
-hostname = socket.gethostname()
-local_ip = socket.gethostbyname(hostname)
 // Ensure all image and PDF URLs are absolute
 import { Platform } from "react-native";
-const API_BASE_URL = `http://${local_ip}:8000`;
+const API_BASE_URL = "http://10.30.20.215:8000";
 
 function makeAbsoluteUrl(path: string | undefined): string | undefined {
   if (!path) return undefined;

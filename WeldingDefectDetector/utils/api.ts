@@ -1,11 +1,7 @@
 // utils/api.ts
 import { InspectResponse, Job, Scan, JobScansResponse, ReportResponse } from "../types/api";
-import socket
 
-hostname = socket.gethostname()
-local_ip = socket.gethostbyname(hostname)
-
-const API_BASE_URL = `http://${local_ip}:8000`;
+const API_BASE_URL = "http://10.30.20.215:8000"; 
 import { AnalysisResult } from '../types/analysis';
 
 export function mapApiResponse(apiResponse: any): AnalysisResult {
