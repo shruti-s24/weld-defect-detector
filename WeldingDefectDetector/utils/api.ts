@@ -1,7 +1,7 @@
 // utils/api.ts
 import { InspectResponse, Job, Scan, JobScansResponse, ReportResponse } from "../types/api";
 
-const API_BASE_URL = "http://10.30.20.215:8000"; 
+const API_BASE_URL = "https://unnectareous-interlucent-erinn.ngrok-free.dev"; 
 import { AnalysisResult } from '../types/analysis';
 
 export function mapApiResponse(apiResponse: any): AnalysisResult {

@@ -25,7 +25,7 @@ import {
 
 // Ensure all image and PDF URLs are absolute
 import { Platform } from "react-native";
-const API_BASE_URL = "http://10.30.20.215:8000";
+const API_BASE_URL = "https://unnectareous-interlucent-erinn.ngrok-free.dev";
 
 function makeAbsoluteUrl(path: string | undefined): string | undefined {
   if (!path) return undefined;
@@ -62,7 +62,7 @@ type AppMode =
   | "report";
 
 // 🔁 CHANGE THIS ONLY
-const API_URL = "http://10.30.20.215:8000/inspect/image";
+const API_URL = " https://unnectareous-interlucent-erinn.ngrok-free.dev/inspect/image";
 
 export default function App() {
   const [mode, setMode] = useState<AppMode>("login");
@@ -95,7 +95,7 @@ export default function App() {
   const [isRegistering, setIsRegistering] = useState(false);
 
 
-  const API_BASE = "http://10.30.20.215:8000";
+  const API_BASE = "https://unnectareous-interlucent-erinn.ngrok-free.dev";
 
   const handleLogin = async () => {
     if (!email || !password) {
